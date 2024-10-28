@@ -18,7 +18,7 @@ router = APIRouter()
 @router.post("/signup", response_model=Dict)
 async def signup_endpoint(user_data: UserCreate) -> Dict:
     """Create a new user account."""
-    return await signup(user_data)
+    return await signup(**user_data.model_dump())
 
 
 @router.post("/token", response_model=Token)
