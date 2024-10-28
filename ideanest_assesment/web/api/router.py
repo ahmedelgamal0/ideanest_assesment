@@ -5,6 +5,7 @@ from ideanest_assesment.web.api import (
     dummy,
     echo,
     monitoring,
+    organization,
     rabbit,
     redis,
     user,
@@ -18,3 +19,6 @@ api_router.include_router(dummy.router, prefix="/dummy", tags=["dummy"])
 api_router.include_router(redis.router, prefix="/redis", tags=["redis"])
 api_router.include_router(rabbit.router, prefix="/rabbit", tags=["rabbit"])
 api_router.include_router(user.router, prefix="/users", tags=["users"])
+api_router.include_router(
+    organization.router, prefix="/organizations", tags=["organizations"],
+)

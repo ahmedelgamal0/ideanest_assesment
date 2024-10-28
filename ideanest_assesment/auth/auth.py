@@ -7,7 +7,6 @@ from jose import JWTError, jwt  # type: ignore
 
 from ideanest_assesment.db.models.user import User, pwd_context
 from ideanest_assesment.settings import settings
-from ideanest_assesment.web.api.user.schema import Token, UserCreate
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/users/token")
 
@@ -101,7 +100,7 @@ async def get_current_active_user(
     return current_user
 
 
-async def authenticate_user(form_data: OAuth2PasswordRequestForm = Depends()) -> Token:
+async def authenticate_user(form_data: OAuth2PasswordRequestForm = Depends()):
     """
     Authenticate a user and generate an access token.
 
@@ -140,7 +139,7 @@ async def authenticate_user(form_data: OAuth2PasswordRequestForm = Depends()) ->
     }
 
 
-async def signup(user_data: UserCreate) -> Dict:
+async def signup(user_data: dict) -> Dict:
     """
     Create a new user account.
 
@@ -153,21 +152,17 @@ async def signup(user_data: UserCreate) -> Dict:
     Raises:
         HTTPException: If a user with the provided email already exists.
     """
-    existing_user = await User.find_one(User.email == user_data.email)
+    existing_user = await User.find_one(User.email == user_data.get("email"))
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    hashed_password = pwd_context.hash(user_data.password)
-    new_user = User(
-        name=user_data.name,
-        email=user_data.email,
-        hashed_password=hashed_password,
-    )
+    hashed_password = pwd_context.hash(user_data.get("password"))
+    new_user = User(user_data)
     await new_user.create()
     return {"message": "User created successfully"}
 
 
-async def new_refresh_token(refresh_token: str) -> Token:
+async def new_refresh_token(refresh_token: str):
     """Refresh an access token."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
