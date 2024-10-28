@@ -5,6 +5,7 @@ from ideanest_assesment.db.dao.organization_dao import OrganizationDAO
 from ideanest_assesment.db.models.user import User
 from ideanest_assesment.web.api.organization.schema import (
     OrganizationCreate,
+    OrganizationInvite,
     OrganizationResponse,
     OrganizationUpdate,
 )
@@ -66,3 +67,14 @@ async def delete_organization_endpoint(organization_id: str) -> None:
     """Delete an organization by its ID."""
     await OrganizationDAO.delete_organization(organization_id)
     return {"message": "Organization deleted successfully"}
+
+
+@router.post("/{organization_id}/invite")
+async def invite_user_endpoint(
+    organization_id: str,
+    invite_data: OrganizationInvite,
+    current_user: User = Depends(get_current_active_user),
+):
+    """Invites user to Organization."""
+    await OrganizationDAO.invite_user(organization_id, invite_data, current_user)
+    return {"message": "User invited successfully"}

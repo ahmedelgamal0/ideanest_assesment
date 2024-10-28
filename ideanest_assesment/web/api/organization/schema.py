@@ -1,5 +1,5 @@
 from bson import ObjectId
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from ideanest_assesment.db.models.organization import OrganizationMember
 
@@ -25,3 +25,7 @@ class OrganizationResponse(BaseModel):
     members: list[OrganizationMember] = []
 
 
+class OrganizationInvite(BaseModel):
+    """Schema for inviting user to organization."""
+
+    user_email: EmailStr

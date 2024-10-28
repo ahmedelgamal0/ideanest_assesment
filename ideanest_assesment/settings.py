@@ -121,6 +121,9 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_minutes: int = 60 * 24 * 7
 
+    # SENDGRID_API_KEY
+    sendgrid_api_key: str = "SENDGRID_API_KEY"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_prefix="IDEANEST_ASSESMENT_",
