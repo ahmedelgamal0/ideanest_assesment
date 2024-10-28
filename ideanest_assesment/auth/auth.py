@@ -3,9 +3,11 @@ from typing import Dict
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from jose import JWTError, jwt  # type: ignore
+from jose import JWTError, jwt
+from redis.asyncio import ConnectionPool, Redis
 
 from ideanest_assesment.db.models.user import User, pwd_context
+from ideanest_assesment.services.redis.dependency import get_redis_pool
 from ideanest_assesment.settings import settings
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/users/token")
@@ -157,12 +159,19 @@ async def signup(user_data: dict) -> Dict:
         raise HTTPException(status_code=400, detail="Email already registered")
 
     hashed_password = pwd_context.hash(user_data.get("password"))
-    new_user = User(user_data)
+    new_user = User(
+        name=user_data.get("name"),
+        email=user_data.get("email"),
+        hashed_password=hashed_password,
+    )
     await new_user.create()
     return {"message": "User created successfully"}
 
 
-async def new_refresh_token(refresh_token: str):
+async def new_refresh_token(
+    refresh_token: str,
+    redis_pool: ConnectionPool = Depends(get_redis_pool),
+):
     """Refresh an access token."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -180,6 +189,15 @@ async def new_refresh_token(refresh_token: str):
     user = await User.find_one(User.email == email)
     if user is None or user.refresh_token != refresh_token:
         raise credentials_exception
+
+    # Check if the refresh token has been revoked
+    async with Redis(connection_pool=redis_pool) as redis:
+        revoked = await redis.exists(f"revoked_token:{refresh_token}")
+    if revoked:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token revoked",
+        )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.email},
@@ -191,10 +209,40 @@ async def new_refresh_token(refresh_token: str):
         data={"sub": user.email},
         expires_delta=refresh_token_expires,
     )
-    user.refresh_token = new_refresh_token  # Update the refresh token
+    user.refresh_token = new_refresh_token
     await user.save()
     return {
         "access_token": access_token,
-        "refresh_token": new_refresh_token,  # Return the new refresh token
+        "refresh_token": new_refresh_token,
         "token_type": "bearer",
     }
+
+
+async def revoke_refresh_token(
+    refresh_token: str,
+    current_user: User,
+    redis_pool: ConnectionPool = Depends(get_redis_pool),
+) -> dict:
+    """Revoke a refresh token."""
+    try:
+        payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None or email != current_user.email:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token",
+            )
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+        )
+
+    async with Redis(connection_pool=redis_pool) as redis:
+        # Store the refresh token in Redis with an expiration time
+        await redis.set(
+            f"revoked_token:{refresh_token}",
+            1,
+            ex=REFRESH_TOKEN_EXPIRE_MINUTES * 60,
+        )
+    return {"message": "Refresh token revoked"}

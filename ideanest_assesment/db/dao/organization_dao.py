@@ -2,8 +2,10 @@ from fastapi import HTTPException
 
 from ideanest_assesment.db.models.organization import Organization, OrganizationMember
 from ideanest_assesment.db.models.user import User
+from ideanest_assesment.services.tasks.send_email import send_invitation_email
 from ideanest_assesment.web.api.organization.schema import (
     OrganizationCreate,
+    OrganizationInvite,
     OrganizationUpdate,
 )
 
@@ -101,3 +103,44 @@ class OrganizationDAO:
         """
         organization = await cls.get_organization(organization_id)
         await organization.delete()
+
+    @classmethod
+    async def invite_user(
+        cls,
+        organization_id: str,
+        invite_data: OrganizationInvite,
+        current_user: User,
+    ):
+        organization = await cls.get_organization(organization_id)
+
+        # Check if the user to be invited exists
+        invited_user = await User.find_one(User.email == invite_data.user_email)
+        if not invited_user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Check if the user is already a member of the organization
+        existing_member = next(
+            (
+                member
+                for member in organization.members
+                if member.user.id == invited_user.id
+            ),
+            None,
+        )
+        if existing_member:
+            raise HTTPException(
+                status_code=400, detail="User is already a member of this organization",
+            )
+
+        # Add the invited user to the organization's members list
+        organization.members.append(
+            OrganizationMember(
+                user=invited_user, access_level="member",
+            )
+        )
+        await organization.save()
+        send_invitation_email.delay(
+            organization.name, invited_user.email, current_user.email
+        )
+
+
