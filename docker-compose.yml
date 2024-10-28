@@ -1,0 +1,85 @@
+services:
+  api: &main_app
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    image: ideanest_assesment:${IDEANEST_ASSESMENT_VERSION:-latest}
+    restart: always
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rmq:
+        condition: service_healthy
+    environment:
+      IDEANEST_ASSESMENT_HOST: 0.0.0.0
+      IDEANEST_ASSESMENT_DB_HOST: ideanest_assesment-db
+      IDEANEST_ASSESMENT_DB_PORT: 27017
+      IDEANEST_ASSESMENT_DB_USER: ideanest_assesment
+      IDEANEST_ASSESMENT_DB_PASS: ideanest_assesment
+      IDEANEST_ASSESMENT_DB_BASE: admin
+      IDEANEST_ASSESMENT_RABBIT_HOST: ideanest_assesment-rmq
+      IDEANEST_ASSESMENT_REDIS_HOST: ideanest_assesment-redis
+  db:
+    image: mongo:7.0
+    hostname: ideanest_assesment-db
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: "ideanest_assesment"
+      MONGO_INITDB_ROOT_PASSWORD: "ideanest_assesment"
+    command: "mongod"
+    volumes:
+      - ideanest_assesment-db-data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 40
+
+  migrator:
+    image: ideanest_assesment:${IDEANEST_ASSESMENT_VERSION:-latest}
+    restart: "no"
+    environment:
+      IDEANEST_ASSESMENT_DB_HOST: ideanest_assesment-db
+      IDEANEST_ASSESMENT_DB_PORT: 27017
+      IDEANEST_ASSESMENT_DB_USER: ideanest_assesment
+      IDEANEST_ASSESMENT_DB_PASS: ideanest_assesment
+      IDEANEST_ASSESMENT_DB_BASE: ideanest_assesment
+    depends_on:
+      db:
+        condition: service_healthy
+
+  redis:
+    image: bitnami/redis:6.2.5
+    hostname: "ideanest_assesment-redis"
+    restart: always
+    environment:
+      ALLOW_EMPTY_PASSWORD: "yes"
+    healthcheck:
+      test: redis-cli ping
+      interval: 1s
+      timeout: 3s
+      retries: 50
+
+  rmq:
+    image: rabbitmq:3.9.16-alpine
+    hostname: "ideanest_assesment-rmq"
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: "guest"
+      RABBITMQ_DEFAULT_PASS: "guest"
+      RABBITMQ_DEFAULT_VHOST: "/"
+    healthcheck:
+      test: rabbitmq-diagnostics check_running -q
+      interval: 3s
+      timeout: 3s
+      retries: 50
+
+
+
+volumes:
+  ideanest_assesment-db-data:
+    name: ideanest_assesment-db-data
